@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Schedule Planning Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .loading {
+            display: none;
+        }
+        .loading.show {
+            display: block;
+        }
+        .task-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .calendar-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center my-4">Smart Schedule Planning Assistant</h1>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="task-form">
+                    <h3>Add New Task</h3>
+                    <form id="taskForm">
+                        <div class="mb-3">
+                            <label for="userId" class="form-label">User ID</label>
+                            <input type="number" class="form-control" id="userId" value="1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="taskName" class="form-label">Task Name</label>
+                            <input type="text" class="form-control" id="taskName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="taskDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="taskDescription" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="priority" class="form-label">Priority (1=highest)</label>
+                            <input type="number" class="form-control" id="priority" min="1" max="10" value="5" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="duration" class="form-label">Duration (minutes)</label>
+                            <input type="number" class="form-control" id="duration" min="1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="deadline" class="form-label">Deadline</label>
+                            <input type="datetime-local" class="form-control" id="deadline" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="taskType" class="form-label">Task Type</label>
+                            <select class="form-control" id="taskType" required>
+                                <option value="study">Study</option>
+                                <option value="work">Work</option>
+                                <option value="personal">Personal</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Task</button>
+                    </form>
+                </div>
+                
+                <div class="mt-4">
+                    <h4>Actions</h4>
+                    <button id="generateScheduleBtn" class="btn btn-success mb-2">Generate Schedule</button>
+                    <button id="viewTasksBtn" class="btn btn-info">View All Tasks</button>
+                </div>
+                
+                <div id="tasksList" class="mt-4">
+                    <h4>Current Tasks</h4>
+                    <div id="tasksContainer"></div>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="calendar-container">
+                    <div class="loading text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Searching for schedule data...</p>
+                    </div>
+                    <div id="calendar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let calendar;
+        const API_BASE = 'http://localhost:8080';
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCalendar();
+            setupEventListeners();
+            loadTasks();
+        });
+        
+        function initializeCalendar() {
+            const calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                events: [],
+                eventDidMount: function(info) {
+                    info.el.style.backgroundColor = getEventColor(info.event.extendedProps.type);
+                }
+            });
+            calendar.render();
+        }
+        
+        function setupEventListeners() {
+            document.getElementById('taskForm').addEventListener('submit', addTask);
+            document.getElementById('generateScheduleBtn').addEventListener('click', generateSchedule);
+            document.getElementById('viewTasksBtn').addEventListener('click', loadTasks);
+        }
+        
+        async function addTask(event) {
+            event.preventDefault();
+            
+            const taskData = {
+                user_id: parseInt(document.getElementById('userId').value),
+                name: document.getElementById('taskName').value,
+                description: document.getElementById('taskDescription').value,
+                priority: parseInt(document.getElementById('priority').value),
+                duration: parseInt(document.getElementById('duration').value),
+                deadline: document.getElementById('deadline').value.replace('T', ' ') + ':00',
+                type: document.getElementById('taskType').value
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/tasks`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(taskData)
+                });
+                
+                if (response.ok) {
+                    alert('Task added successfully!');
+                    document.getElementById('taskForm').reset();
+                    loadTasks();
+                } else {
+                    alert('Failed to add task');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error adding task');
+            }
+        }
+        
+        async function generateSchedule() {
+            const userId = document.getElementById('userId').value;
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`${API_BASE}/schedule/${userId}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const schedule = await response.json();
+                    displaySchedule(schedule);
+                    alert('Schedule generated successfully!');
+                } else {
+                    alert('Failed to generate schedule');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error generating schedule');
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        async function loadTasks() {
+            const userId = document.getElementById('userId').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/tasks/${userId}`);
+                if (response.ok) {
+                    const tasks = await response.json();
+                    displayTasks(tasks);
+                }
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+            }
+        }
+        
+        function displaySchedule(schedule) {
+            const events = schedule.map(item => ({
+                id: item.id,
+                title: `Task ${item.task_id}`,
+                start: item.start_time,
+                end: item.end_time,
+                extendedProps: {
+                    type: 'scheduled'
+                }
+            }));
+            
+            calendar.removeAllEvents();
+            calendar.addEventSource(events);
+        }
+        
+        function displayTasks(tasks) {
+            const container = document.getElementById('tasksContainer');
+            container.innerHTML = '';
+            
+            if (tasks.length === 0) {
+                container.innerHTML = '<p>No tasks found</p>';
+                return;
+            }
+            
+            tasks.forEach(task => {
+                const taskDiv = document.createElement('div');
+                taskDiv.className = 'card mb-2';
+                taskDiv.innerHTML = `
+                    <div class="card-body">
+                        <h6 class="card-title">${task.name}</h6>
+                        <p class="card-text">${task.description}</p>
+                        <small class="text-muted">
+                            Priority: ${task.priority} | Duration: ${task.duration}min | 
+                            Deadline: ${task.deadline} | Type: ${task.type}
+                        </small>
+                    </div>
+                `;
+                container.appendChild(taskDiv);
+            });
+        }
+        
+        function showLoading(show) {
+            const loading = document.querySelector('.loading');
+            const calendarEl = document.getElementById('calendar');
+            
+            if (show) {
+                loading.classList.add('show');
+                calendarEl.style.display = 'none';
+            } else {
+                loading.classList.remove('show');
+                calendarEl.style.display = 'block';
+            }
+        }
+        
+        function getEventColor(type) {
+            switch(type) {
+                case 'study': return '#28a745';
+                case 'work': return '#007bff';
+                case 'personal': return '#ffc107';
+                default: return '#6c757d';
+            }
+        }
+    </script>
+</body>
+</html>
+
